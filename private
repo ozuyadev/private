@@ -1,0 +1,305 @@
+if not LPH_OBFUSCATED then
+	getfenv().LPH_NO_VIRTUALIZE = function(f) return f end
+	getfenv().LPH_JIT_MAX = function(f) return f end
+end
+
+LPH_JIT_MAX(function()
+	
+	local Hooks = {}
+	local Targets = {}
+	local Whitelisted = {
+		{655, 775, 724, 633, 891},
+		{760, 760, 771, 665, 898},
+		{660, 759, 751, 863, 771},
+	}
+	
+	local function TableEquality(x, y)
+		if (#x ~= #y) then
+			return false
+		end
+	
+		for i, v in next, x do
+			if (y[i] ~= v) then
+				return false
+			end
+		end
+	
+		return true
+	end
+	
+	LPH_NO_VIRTUALIZE(function()
+		for i, v in next, getgc(true) do
+			if (type(v) == "function") then
+				local ScriptTrace, Line = debug.info(v, "sl")
+		
+				if string.find(ScriptTrace, "PlayerModule.LocalScript") and table.find({42, 51, 61}, Line) then
+					table.insert(Targets, v)
+				end
+			end
+			
+			if (type(v) == "table") and (rawlen(v) == 19) and getrawmetatable(v) then
+				Targets.__call = rawget(getrawmetatable(v), "__call")
+			end
+		end
+	end)()
+	
+	if not (Targets[1] and Targets[2] and Targets[3] and Targets.__call) then
+		warn("Bypass failed to load properly")
+		return
+	end
+	
+	local ScriptPath = debug.info(Targets[1], "s")
+	
+	Hooks.debug_info = hookfunction(debug.info, LPH_NO_VIRTUALIZE(function(...)
+
+		if not checkcaller() and TableEquality({...}, {2, "s"}) then
+			return ScriptPath
+		end
+	
+		return Hooks.debug_info(...)
+	end))
+	
+	hookfunction(Targets[1], LPH_NO_VIRTUALIZE(function() end))
+	hookfunction(Targets[2], LPH_NO_VIRTUALIZE(function() end))
+	hookfunction(Targets[3], LPH_NO_VIRTUALIZE(function() end))
+	
+	Hooks.__call = hookfunction(Targets.__call, LPH_NO_VIRTUALIZE(function(self, ...)
+		if
+			TableEquality(Whitelisted[1], {...}) or
+			TableEquality(Whitelisted[2], {...}) or
+			TableEquality(Whitelisted[3], {...})
+		then
+			return Hooks.__call(self, ...)
+		end
+	end))
+	
+	task.wait(3)
+	
+end)()
+
+-- Load Zypher UI Library
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/YungPloits/Random/main/ZypherModded"))()
+print(library)  -- Debug: Check if library is loaded
+
+if not library then
+    error("Failed to load Zypher UI Library")
+end
+
+-- Create Main UI Window
+local success, main = pcall(function()
+    return library:CreateMain({
+        projName = "Tyrant Hub",
+        Resizable = true,
+        MinSize = UDim2.new(0, 400, 0, 400),
+        MaxSize = UDim2.new(0, 750, 0, 500),
+    })
+end)
+
+if not success then
+    error("Failed to create main UI window: " .. main)
+end
+
+-- Create Tabs and Sections
+local catchingCategory = main:CreateCategory("Catching")
+local catchingSection = catchingCategory:CreateSection("Magnets")
+
+local playerCategory = main:CreateCategory("Player")
+local playerSection = playerCategory:CreateSection("Settings")
+
+local miscCategory = main:CreateCategory("Misc")
+local miscSection = miscCategory:CreateSection("Ball Landing Prediction")
+
+-- Initialize Variables
+local Workspace = game:GetService("Workspace")
+local magson = false
+local range = 10
+local delayon = false
+local delay = 0.1
+
+local FootballLandingPredictions = false
+local predictionColor = Color3.fromRGB(255, 255, 255)
+local eventConnection
+
+-- Function to Handle Magnets
+local function handleMagnets()
+    Workspace.ChildAdded:Connect(function(child)
+        if child.Name == "Football" and child:IsA("BasePart") then
+            if magson then
+                if delayon then
+                    wait(delay)
+                end
+                child.Size = Vector3.new(range, range, range)
+                child.CanCollide = false
+            else
+                child.Size = Vector3.new(0.85, 1.2, 0.85)
+                child.CanCollide = true
+            end
+        end
+    end)
+end
+
+-- Add UI Elements for Magnets
+local successToggle, errToggle = pcall(function()
+    catchingSection:Create("Toggle", "Magnets", function(state)
+        magson = state
+        handleMagnets()
+    end, { default = false })
+end)
+
+if not successToggle then
+    error("Failed to create Magnets toggle: " .. errToggle)
+end
+
+local successSliderRange, errSliderRange = pcall(function()
+    catchingSection:Create("Slider", "Range", function(value)
+        range = value
+    end, { min = 1, max = 25, default = 10, increment = 1, valueName = "Range" })
+end)
+
+if not successSliderRange then
+    error("Failed to create Range slider: " .. errSliderRange)
+end
+
+local successToggleDelay, errToggleDelay = pcall(function()
+    catchingSection:Create("Toggle", "Magnets Delay", function(state)
+        delayon = state
+    end, { default = false })
+end)
+
+if not successToggleDelay then
+    error("Failed to create Magnets Delay toggle: " .. errToggleDelay)
+end
+
+local successSliderDelay, errSliderDelay = pcall(function()
+    catchingSection:Create("Slider", "Delay", function(value)
+        delay = value
+    end, { min = 0, max = 1, default = 0.1, increment = 0.1, valueName = "Delay" })
+end)
+
+if not successSliderDelay then
+    error("Failed to create Delay slider: " .. errSliderDelay)
+end
+
+-- Function to Smooth WalkSpeed Adjustments
+local function adjustWalkSpeed(targetSpeed)
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            local currentSpeed = humanoid.WalkSpeed
+            local step = (targetSpeed - currentSpeed) / 10 -- Smooth adjustment
+            for i = 1, 10 do
+                humanoid.WalkSpeed = currentSpeed + step * i
+                task.wait(0.05) -- Adjust the delay as needed for smoothness
+            end
+        end
+    end
+end
+
+-- Function to Smooth JumpPower Adjustments
+local function adjustJumpPower(targetPower)
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            local currentPower = humanoid.JumpPower
+            local step = (targetPower - currentPower) / 10 -- Smooth adjustment
+            for i = 1, 10 do
+                humanoid.JumpPower = currentPower + step * i
+                task.wait(0.05) -- Adjust the delay as needed for smoothness
+            end
+        end
+    end
+end
+
+-- Add UI Elements for Player Settings
+local successToggleJump, errToggleJump = pcall(function()
+    playerSection:Create("Toggle", "JumpPower", function(state)
+        adjustJumpPower(state and 50 or 0) -- Smooth adjustment
+    end, { default = false })
+end)
+
+if not successToggleJump then
+    error("Failed to create JumpPower toggle: " .. errToggleJump)
+end
+
+local successSliderJump, errSliderJump = pcall(function()
+    playerSection:Create("Slider", "JumpPower", function(value)
+        adjustJumpPower(value) -- Smooth adjustment
+    end, { min = 50, max = 60, default = 50, increment = 1, valueName = "JumpPower" })
+end)
+
+if not successSliderJump then
+    error("Failed to create JumpPower slider: " .. errSliderJump)
+end
+
+local successToggleWalk, errToggleWalk = pcall(function()
+    playerSection:Create("Toggle", "WalkSpeed", function(state)
+        adjustWalkSpeed(state and 20 or 0) -- Smooth adjustment
+    end, { default = falseTo fix the suspicious movement kick in your script, you can introduce adjustments that reduce the likelihood of the script being detected by anti-cheat mechanisms. This involves smoothing movements, randomizing key values, and limiting extreme actions that can trigger automatic kicks. Here's how you can adjust your current script:
+
+### Adjustments:
+1. **Randomize Movement Values**: Instead of using fixed values for things like `JumpPower` or `WalkSpeed`, introduce slight randomization. This makes the movements look more natural and less predictable.
+
+2. **Smooth Movement Transitions**: Use gradual increases or decreases in movement values rather than instant changes. This prevents sudden, unnatural behavior that anti-cheats detect.
+
+3. **Rate Limiting**: Add a rate limiter to control how frequently changes to movement-related properties can occur. For example, adjust the speed or jump only if a certain amount of time has passed since the last change.
+
+Here's an updated portion of your script implementing these adjustments:
+
+```lua
+-- Adjust JumpPower with randomization and smoothing
+local function adjustJumpPower(enabled, targetValue)
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            -- Use tween-like function for smooth transition
+            local currentJumpPower = humanoid.JumpPower
+            local newJumpPower = enabled and (targetValue + math.random(-1, 1)) or 0 -- Adds slight randomness
+            while math.abs(currentJumpPower - newJumpPower) > 0.1 do
+                currentJumpPower = currentJumpPower + (newJumpPower - currentJumpPower) * 0.1
+                humanoid.JumpPower = currentJumpPower
+                task.wait(0.05) -- Adjust smoothness rate
+            end
+            humanoid.JumpPower = newJumpPower
+        end
+    end
+end
+
+-- Adjust WalkSpeed with rate limiting
+local lastSpeedChange = 0
+local function adjustWalkSpeed(enabled, targetValue)
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            local currentTime = tick()
+            if currentTime - lastSpeedChange > 0.5 then -- Rate limiting to 0.5 seconds
+                humanoid.WalkSpeed = enabled and (targetValue + math.random(-1, 1)) or 16 -- Default walk speed
+                lastSpeedChange = currentTime
+            end
+        end
+    end
+end
+
+-- UI Toggle Example with adjusted functions
+playerSection:Create("Toggle", "JumpPower", function(state)
+    adjustJumpPower(state, 50) -- Adjusted function with smoothing
+end, { default = false })
+
+playerSection:Create("Slider", "JumpPower", function(value)
+    adjustJumpPower(true, value) -- Continuously update with smooth transition
+end, { min = 50, max = 60, default = 50, increment = 1, valueName = "JumpPower" })
+
+playerSection:Create("Toggle", "WalkSpeed", function(state)
+    adjustWalkSpeed(state, 20) -- Adjusted function with rate limiting
+end, { default = false })
+
+playerSection:Create("Slider", "WalkSpeed", function(value)
+    adjustWalkSpeed(true, value) -- Continuously update speed within rate limits
+end, { min = 20, max = 23, default = 20, increment = 1, valueName = "WalkSpeed" })
